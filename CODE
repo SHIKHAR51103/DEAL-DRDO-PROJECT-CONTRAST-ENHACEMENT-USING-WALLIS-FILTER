@@ -1,0 +1,94 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+#define IMG_SIZE 512
+
+unsigned char ch[IMG_SIZE][IMG_SIZE];
+unsigned char chout[IMG_SIZE][IMG_SIZE];
+
+void read_image(const char *filename) {
+    FILE *ptr1 = fopen(filename, "rb");
+    if (ptr1 == NULL) {
+        perror("Error opening input file");
+        exit(EXIT_FAILURE);
+    }
+    size_t read_items = fread(ch, sizeof(unsigned char), IMG_SIZE * IMG_SIZE, ptr1);
+    if (read_items != IMG_SIZE * IMG_SIZE) {
+        perror("Error reading input file");
+        fclose(ptr1);
+        exit(EXIT_FAILURE);
+    }
+    fclose(ptr1);
+}
+
+void write_image(const char *filename) {
+    FILE *ptr2 = fopen(filename, "wb");
+    if (ptr2 == NULL) {
+        perror("Error opening output file");
+        exit(EXIT_FAILURE);
+    }
+    fwrite(chout, sizeof(unsigned char), IMG_SIZE * IMG_SIZE, ptr2);
+    fclose(ptr2);
+}
+
+void apply_wallis_filter(float b, float c, float mf, float sf, int radius) {
+    int i, j, k, l;
+    float local_mean, local_std_dev, mk, sk;
+    float R = (2 * radius + 1);
+    R *= R; // Square the window size for further calculations
+
+    for (i = 0; i < IMG_SIZE; i++) {
+        for (j = 0; j < IMG_SIZE; j++) {
+            // Calculate local mean
+            local_mean = 0;
+            int count = 0;
+            for (k = i - radius; k <= i + radius; k++) {
+                for (l = j - radius; l <= j + radius; l++) {
+                    if (k >= 0 && k < IMG_SIZE && l >= 0 && l < IMG_SIZE) {
+                        local_mean += ch[k][l];
+                        count++;
+                    }
+                }
+            }
+            mk = local_mean / count;
+
+            // Calculate local standard deviation
+            local_std_dev = 0;
+            for (k = i - radius; k <= i + radius; k++) {
+                for (l = j - radius; l <= j + radius; l++) {
+                    if (k >= 0 && k < IMG_SIZE && l >= 0 && l < IMG_SIZE) {
+                        float diff = ch[k][l] - mk;
+                        local_std_dev += diff * diff;
+                    }
+                }
+            }
+            sk = sqrt(local_std_dev / count);
+
+            // Calculate alpha and beta
+            float alpha = (c * sf) / (c * sk + (1 - c) * sf);
+            float beta = b * mf + (1 - b) * mk;
+
+            // Apply the filter
+            chout[i][j] = (unsigned char)(alpha * (ch[i][j] - mk) + beta);
+        }
+    }
+}
+
+int main() {
+    float b, c, mf, sf;
+    int radius;
+
+    printf("Enter the value of b and c: ");
+    scanf("%f %f", &b, &c);
+    printf("Enter the value of mf and sf: ");
+    scanf("%f %f", &mf, &sf);
+    printf("Enter the radius: ");
+    scanf("%d", &radius);
+
+    read_image("dehradun.raw");
+    apply_wallis_filter(b, c, mf, sf, radius);
+    write_image("ris.raw");
+
+    return 0;
+}
